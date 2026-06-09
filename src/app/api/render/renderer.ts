@@ -89,28 +89,53 @@ export const THEMES: Record<string, Partial<RenderOptions>> = {
 
 // Estimating text width based on font-family metrics.
 export function estimateTextWidth(text: string, fontSize: number, font: string, letterSpacing: number = 0): number {
+  const normalizedFont = font.toLowerCase();
   const isMonospace = ['monospace', 'fira code', 'courier', 'vt323', 'source code pro', 'major mono display', 'share tech mono', 'space mono', 'dm mono', 'anonymous pro'].some(
-    f => font.toLowerCase().includes(f)
+    f => normalizedFont.includes(f)
   );
   
   if (isMonospace) {
     return text.length * fontSize * 0.6 + Math.max(0, text.length - 1) * letterSpacing;
   }
+
+  const fontMetrics = ((): {
+    upper: number;
+    lower: number;
+    thinLower: number;
+    wideLower: number;
+    digit: number;
+    space: number;
+    punctuation: number;
+    fallback: number;
+  } => {
+    if (normalizedFont.includes('orbitron')) {
+      return { upper: 0.90, lower: 0.75, thinLower: 0.38, wideLower: 0.92, digit: 0.74, space: 0.38, punctuation: 0.35, fallback: 0.70 };
+    }
+    if (normalizedFont.includes('inter')) {
+      return { upper: 0.80, lower: 0.64, thinLower: 0.30, wideLower: 0.88, digit: 0.62, space: 0.31, punctuation: 0.28, fallback: 0.60 };
+    }
+    if (normalizedFont.includes('outfit')) {
+      return { upper: 0.76, lower: 0.60, thinLower: 0.30, wideLower: 0.82, digit: 0.58, space: 0.31, punctuation: 0.28, fallback: 0.56 };
+    }
+    if (normalizedFont.includes('comfortaa')) {
+      return { upper: 0.82, lower: 0.62, thinLower: 0.30, wideLower: 0.85, digit: 0.60, space: 0.32, punctuation: 0.29, fallback: 0.58 };
+    }
+    return { upper: 0.62, lower: 0.47, thinLower: 0.25, wideLower: 0.75, digit: 0.50, space: 0.28, punctuation: 0.25, fallback: 0.50 };
+  })();
   
   let total = 0;
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
-    if (char >= 'A' && char <= 'Z') total += 0.62;
+    if (char >= 'A' && char <= 'Z') total += fontMetrics.upper;
     else if (char >= 'a' && char <= 'z') {
-      if ('i1l'.includes(char)) total += 0.25;
-      else if ('mw'.includes(char)) total += 0.75;
-      else total += 0.47;
+      if ('i1l'.includes(char)) total += fontMetrics.thinLower;
+      else if ('mw'.includes(char)) total += fontMetrics.wideLower;
+      else total += fontMetrics.lower;
     }
-    else if (char >= '0' && char <= '9') total += 0.5;
-    else if (char === ' ') total += 0.28;
-    else if ('.,;:\'!/\\|'.includes(char)) total += 0.25;
-    else if ('@#%&()[]{}_+-='.includes(char)) total += 0.6;
-    else total += 0.5; // fallback
+    else if (char >= '0' && char <= '9') total += fontMetrics.digit;
+    else if (char === ' ') total += fontMetrics.space;
+    else if ('.;:,\'!/\\|'.includes(char)) total += fontMetrics.punctuation;
+    else total += fontMetrics.fallback;
   }
   return total * fontSize + Math.max(0, text.length - 1) * letterSpacing;
 }
@@ -319,13 +344,15 @@ export async function renderSVG(options: Partial<RenderOptions>): Promise<string
 
     // Cursor positioning and visibility animation
     if (cursor !== 'none') {
+      const clipPadding = 3; // Match the safety margin in clip-path width
+      const cursorEnd = line.width + clipPadding;
       keyframesCss += `
       @keyframes cursor-line-${index} {
         0% { opacity: 0; transform: translateX(0); }
         ${pStart > 0 ? `${(pStart - 0.001).toFixed(3)}% { opacity: 0; transform: translateX(0); }` : ''}
         ${pStart.toFixed(3)}% { opacity: 1; transform: translateX(0); animation-timing-function: steps(${line.chars}, end); }
-        ${pTyped.toFixed(3)}% { opacity: 1; transform: translateX(${line.width.toFixed(1)}px); animation-timing-function: linear; }
-        ${pPaused.toFixed(3)}% { opacity: 1; transform: translateX(${line.width.toFixed(1)}px); animation-timing-function: steps(${line.chars}, end); }
+        ${pTyped.toFixed(3)}% { opacity: 1; transform: translateX(${cursorEnd.toFixed(1)}px); animation-timing-function: linear; }
+        ${pPaused.toFixed(3)}% { opacity: 1; transform: translateX(${cursorEnd.toFixed(1)}px); animation-timing-function: steps(${line.chars}, end); }
         ${pDeleted.toFixed(3)}% { opacity: 1; transform: translateX(0); animation-timing-function: linear; }
         ${pEnd.toFixed(3)}% { opacity: 0; transform: translateX(0); }
         100% { opacity: 0; transform: translateX(0); }
@@ -474,9 +501,10 @@ export async function renderSVG(options: Partial<RenderOptions>): Promise<string
   const clipPathsXml = renderingElements.map((elem, index) => {
     const detail = lineDetails[index];
     const verticalY = elem.y - size;
+    const clipPadding = 3; // Safety margin to prevent clipping on longer text
     return `
     <clipPath id="${elem.clipPathId}">
-      <rect class="clip-rect-${index}" x="${elem.clipX.toFixed(1)}" y="${verticalY.toFixed(1)}" width="${detail.width.toFixed(1)}" height="${(size * 1.5).toFixed(1)}" />
+      <rect class="clip-rect-${index}" x="${elem.clipX.toFixed(1)}" y="${verticalY.toFixed(1)}" width="${(detail.width + clipPadding).toFixed(1)}" height="${(size * 1.5).toFixed(1)}" />
     </clipPath>
     `;
   }).join('\n');
